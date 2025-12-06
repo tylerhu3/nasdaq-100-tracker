@@ -1,21 +1,15 @@
 import { NextResponse } from 'next/server';
+import { JSONFilePreset } from 'lowdb/node';
 import { getStockData } from '@/lib/fmp';
 import { getYahooData } from '@/lib/yahoo';
 
-// Initialize in-memory cache (global to survive hot reloads in dev)
-if (!global.stockCache) {
-    global.stockCache = { stocks: [], lastUpdated: null };
-}
-
-// Fallback list of some major NASDAQ-100 symbols to bootstrap if cache is empty
-const FALLBACK_SYMBOLS = [
-    'AAPL', 'MSFT', 'AMZN', 'NVDA', 'GOOGL', 'GOOG', 'META', 'TSLA', 'AVGO', 'PEP',
-    'COST', 'CSCO', 'TMUS', 'ADBE', 'TXN', 'NFLX', 'CMCSA', 'AMD', 'QCOM', 'INTC',
-    'HON', 'AMGN', 'INTU', 'BKNG', 'AMAT', 'SBUX', 'ISRG', 'MDLZ', 'GILD', 'ADP'
-];
+// Initialize lowdb
+const defaultData = { stocks: [], lastUpdated: null };
+const db = await JSONFilePreset('db.json', defaultData);
 
 export async function GET(request) {
-    let { stocks, lastUpdated } = global.stockCache;
+    await db.read();
+    const { stocks, lastUpdated } = db.data;
 
     // Check for force refresh param
     const { searchParams } = new URL(request.url);
@@ -35,9 +29,13 @@ export async function GET(request) {
 
     // If cache is invalid or empty, fetch fresh data
     try {
-        // Use existing symbols from cache if available, otherwise use fallback list
-        let symbols = stocks.length > 0 ? stocks.map(s => s.symbol) : FALLBACK_SYMBOLS;
+        // Use existing symbols from DB if available, otherwise we might need a fallback list.
+        // Assuming DB is populated from previous scrape.
+        if (!stocks || stocks.length === 0) {
+            return NextResponse.json({ error: 'No symbols found in DB to update' }, { status: 500 });
+        }
 
+        const symbols = stocks.map(s => s.symbol);
         const updatedStocks = [];
 
         // Fetch data for each symbol
@@ -79,14 +77,13 @@ export async function GET(request) {
             });
 
             const results = await Promise.all(promises);
-            updatedStocks.push(...results.filter(Boolean));
+            updatedStocks.push(...results);
         }
 
-        // Update In-Memory Cache
-        global.stockCache = {
-            stocks: updatedStocks,
-            lastUpdated: now
-        };
+        // Update DB
+        db.data.stocks = updatedStocks;
+        db.data.lastUpdated = now;
+        await db.write();
 
         return NextResponse.json({
             stocks: updatedStocks,
@@ -101,8 +98,7 @@ export async function GET(request) {
             stocks,
             lastUpdated,
             source: 'cache-fallback',
-            error: 'Failed to update data',
-            details: error.message
+            error: 'Failed to update data'
         });
     }
 }
