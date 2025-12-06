@@ -1,17 +1,35 @@
 import { NextResponse } from 'next/server';
-import { JSONFilePreset } from 'lowdb/node';
+import { Redis } from '@upstash/redis';
 import { getStockData } from '@/lib/fmp';
 import { getYahooData } from '@/lib/yahoo';
+import { scrapeStocks } from '@/lib/scraper';
 
-// Initialize lowdb
-const defaultData = { stocks: [], lastUpdated: null };
-const db = await JSONFilePreset('db.json', defaultData);
+// Initialize Redis
+// Requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in .env.local
+const RedisClient = Redis.fromEnv();
+
+// In case the DB is empty or fails, we need a list of symbols to start with.
+const FALLBACK_SYMBOLS = [
+    'AAPL', 'MSFT', 'AMZN', 'NVDA', 'GOOGL', 'GOOG', 'META', 'TSLA', 'AVGO', 'PEP',
+    'COST', 'CSCO', 'TMUS', 'ADBE', 'TXN', 'NFLX', 'CMCSA', 'AMD', 'QCOM', 'INTC',
+    'HON', 'AMGN', 'INTU', 'BKNG', 'AMAT', 'SBUX', 'ISRG', 'MDLZ', 'GILD', 'ADP'
+];
 
 export async function GET(request) {
-    await db.read();
-    const { stocks, lastUpdated } = db.data;
+    // 1. Fetch current data from Redis
+    let dbData = null;
+    try {
+        dbData = await RedisClient.get('stocks_data');
+    } catch (e) {
+        console.error("Redis error:", e);
+    }
 
-    // Check for force refresh param
+    if (!dbData) {
+        dbData = { stocks: [], lastUpdated: null };
+    }
+    const { stocks, lastUpdated } = dbData;
+
+    // 2. Check for force refresh param
     const { searchParams } = new URL(request.url);
     const force = searchParams.get('force') === 'true';
 
@@ -27,21 +45,40 @@ export async function GET(request) {
         });
     }
 
-    // If cache is invalid or empty, fetch fresh data
+    // 3. If cache is invalid or empty, fetch fresh data
     try {
-        // Use existing symbols from DB if available, otherwise we might need a fallback list.
-        // Assuming DB is populated from previous scrape.
-        if (!stocks || stocks.length === 0) {
-            return NextResponse.json({ error: 'No symbols found in DB to update' }, { status: 500 });
+        let symbols = [];
+        const MIN_STOCKS = 50; // If cache has fewer than this, we assume it's incomplete (fallback list)
+
+        // Use existing symbols from DB if available AND sufficient
+        if (stocks.length > MIN_STOCKS) {
+            symbols = stocks.map(s => s.symbol);
+        } else {
+            console.log(`Cache has only ${stocks.length} stocks. Attempting to scrape full list...`);
+            // DB is empty or incomplete, try to scrape the official list
+            try {
+                const scrapedList = await scrapeStocks();
+                if (scrapedList && scrapedList.length > 0) {
+                    symbols = scrapedList.map(s => s.symbol);
+                }
+            } catch (err) {
+                console.error("Scraping failed", err);
+            }
         }
 
-        const symbols = stocks.map(s => s.symbol);
-        const updatedStocks = [];
+        // Last resort
+        if (symbols.length === 0) {
+            // Check if we at least have the partial cache to fall back on
+            if (stocks.length > 0) {
+                symbols = stocks.map(s => s.symbol);
+            } else {
+                symbols = FALLBACK_SYMBOLS;
+            }
+        }
 
-        // Fetch data for each symbol
-        // We'll do this in batches to avoid overwhelming the API or hitting timeouts, 
-        // though FMP is pretty fast.
+        const updatedStocks = [];
         const batchSize = 5;
+
         for (let i = 0; i < symbols.length; i += batchSize) {
             const batch = symbols.slice(i, i + batchSize);
             const promises = batch.map(async (symbol) => {
@@ -77,13 +114,15 @@ export async function GET(request) {
             });
 
             const results = await Promise.all(promises);
-            updatedStocks.push(...results);
+            updatedStocks.push(...results.filter(Boolean));
         }
 
-        // Update DB
-        db.data.stocks = updatedStocks;
-        db.data.lastUpdated = now;
-        await db.write();
+        // 4. Update Redis
+        const newData = {
+            stocks: updatedStocks,
+            lastUpdated: now
+        };
+        await RedisClient.set('stocks_data', newData);
 
         return NextResponse.json({
             stocks: updatedStocks,
@@ -98,7 +137,8 @@ export async function GET(request) {
             stocks,
             lastUpdated,
             source: 'cache-fallback',
-            error: 'Failed to update data'
+            error: 'Failed to update data',
+            details: error.message
         });
     }
 }
