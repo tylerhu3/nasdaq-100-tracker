@@ -14,12 +14,18 @@ export default function Home() {
     setLoading(true);
     try {
       const url = force ? '/api/stocks?force=true' : '/api/stocks';
+      console.log(`[Frontend] Fetching stocks from ${url}...`);
+
       const res = await fetch(url);
       const data = await res.json();
+
+      console.log('[Frontend] API Response:', data);
+      console.log(`[Frontend] Received ${data.stocks?.length || 0} stocks. Source: ${data.source}`);
+
       setStocks(data.stocks);
       setLastUpdated(data.lastUpdated);
     } catch (error) {
-      console.error('Failed to fetch stocks:', error);
+      console.error('[Frontend] Failed to fetch stocks:', error);
     } finally {
       setLoading(false);
     }
