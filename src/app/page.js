@@ -7,7 +7,7 @@ export default function Home() {
   const [stocks, setStocks] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+  const [sortConfig, setSortConfig] = useState({ key: 'stdRange', direction: 'ascending' });
   const { theme, toggleTheme } = useTheme();
 
   async function fetchData(force = false) {
