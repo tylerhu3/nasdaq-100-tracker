@@ -142,11 +142,11 @@ export default function Home() {
               <th onClick={() => requestSort('price')} style={{ cursor: 'pointer' }}>
                 Price{getSortIndicator('price')}
               </th>
-              <th onClick={() => requestSort('change')} style={{ cursor: 'pointer' }}>
-                Change{getSortIndicator('change')}
+              <th onClick={() => requestSort('targetMeanPrice')} style={{ cursor: 'pointer' }}>
+                1Y Target{getSortIndicator('targetMeanPrice')}
               </th>
-              <th onClick={() => requestSort('percentChange')} style={{ cursor: 'pointer' }}>
-                % Change{getSortIndicator('percentChange')}
+              <th onClick={() => requestSort('previousClose')} style={{ cursor: 'pointer' }}>
+                Prev Close{getSortIndicator('previousClose')}
               </th>
               <th onClick={() => requestSort('marketCap')} style={{ cursor: 'pointer' }}>
                 Market Cap{getSortIndicator('marketCap')}
@@ -182,7 +182,6 @@ export default function Home() {
               ))
             ) : (
               sortedStocks.map((stock) => {
-                const isUp = stock.percentChange && (stock.percentChange.includes('+') || !stock.percentChange.includes('-'));
 
                 // Calculate standard range for display and sorting
                 let stdRangeVal = '-';
@@ -223,6 +222,14 @@ export default function Home() {
                   }
                 }
 
+                // Helper to format prices
+                const formatPrice = (val) => {
+                  if (val === null || val === undefined || val === 'N/A') return 'N/A';
+                  const num = parseFloat(val);
+                  if (isNaN(num)) return val;
+                  return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                };
+
                 return (
                   <tr key={stock.symbol} style={rowStyle}>
                     <td className="symbol">
@@ -237,21 +244,17 @@ export default function Home() {
                       </a>
                     </td>
                     <td className="name" title={stock.name}>{stock.name}</td>
-                    <td className="price">{stock.price}</td>
-                    <td className={`change-cell`}>
-                      <span className={`change ${isUp ? 'up' : 'down'}`}>
-                        {stock.change}
-                      </span>
+                    <td className="price">{formatPrice(stock.price)}</td>
+                    <td className="target-price">
+                      {formatPrice(stock.targetMeanPrice)}
                     </td>
-                    <td className={`change-cell`}>
-                      <span className={`change ${isUp ? 'up' : 'down'}`}>
-                        {stock.percentChange}
-                      </span>
+                    <td className="prev-close">
+                      {formatPrice(stock.previousClose)}
                     </td>
                     <td className="market-cap">{stock.marketCap}</td>
                     <td className="volume">{stock.volume ? stock.volume.toLocaleString() : '-'}</td>
                     <td className="range">
-                      {stock.dayLow && stock.dayHigh ? `${stock.dayLow} - ${stock.dayHigh}` : '-'}
+                      {stock.dayLow && stock.dayHigh ? `${formatPrice(stock.dayLow)} - ${formatPrice(stock.dayHigh)}` : '-'}
                     </td>
                     <td className="range">
                       {(() => {

@@ -87,7 +87,9 @@ export async function fetchStockWithFallback(symbol, existingStock = null) {
             yearLow: fmpData.yearLow,
             yearHigh: fmpData.yearHigh,
             exchange: fmpData.exchange,
-            timestamp: fmpData.timestamp
+            timestamp: fmpData.timestamp,
+            previousClose: fmpData.previousClose,
+            targetMeanPrice: null // FMP requires separate call for this, leaving as null for now
         };
     }
 

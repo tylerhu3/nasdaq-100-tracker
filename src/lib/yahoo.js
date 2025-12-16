@@ -5,6 +5,16 @@ export async function getYahooData(symbol) {
     console.log(`Fetching ${symbol} from Yahoo...`);
     try {
         const quote = await yahooFinance.quote(symbol);
+        let targetMeanPrice = null;
+
+        try {
+            const summary = await yahooFinance.quoteSummary(symbol, { modules: ['financialData'] });
+            if (summary && summary.financialData && summary.financialData.targetMeanPrice) {
+                targetMeanPrice = summary.financialData.targetMeanPrice;
+            }
+        } catch (e) {
+            console.warn(`Yahoo quoteSummary failed for ${symbol}:`, e.message);
+        }
 
         if (quote) {
             console.log(`Success Yahoo ${symbol}`);
@@ -21,7 +31,9 @@ export async function getYahooData(symbol) {
                 yearLow: quote.fiftyTwoWeekLow,
                 yearHigh: quote.fiftyTwoWeekHigh,
                 exchange: quote.exchange,
-                timestamp: Math.floor(Date.now() / 1000)
+                timestamp: Math.floor(Date.now() / 1000),
+                previousClose: quote.regularMarketPreviousClose,
+                targetMeanPrice: targetMeanPrice
             };
         }
         console.warn(`Yahoo returned no data for ${symbol}`);
