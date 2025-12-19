@@ -17,7 +17,7 @@ export async function getYahooData(symbol) {
         }
 
         if (quote) {
-            console.log(`Success Yahoo ${symbol}`);
+            console.log(`Success Yahoo ${symbol} ${quote}`);
             return {
                 symbol: quote.symbol,
                 name: quote.longName || quote.shortName,

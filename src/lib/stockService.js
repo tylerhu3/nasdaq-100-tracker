@@ -1,5 +1,4 @@
 import { Redis } from '@upstash/redis';
-import { getStockData } from '@/lib/fmp';
 import { getYahooData } from '@/lib/yahoo';
 import { scrapeStocks } from '@/lib/scraper';
 
@@ -63,37 +62,15 @@ export async function resolveSymbols(currentStocks) {
     return symbols;
 }
 
-export async function fetchStockWithFallback(symbol, existingStock = null) {
-    // Try FMP first
-    let fmpData = await getStockData(symbol);
-
-    // If FMP fails, try Yahoo
-    if (!fmpData) {
-        const yahooData = await getYahooData(symbol);
-        if (yahooData) {
-            return yahooData;
-        }
-    } else {
-        return {
-            symbol: fmpData.symbol,
-            name: fmpData.name,
-            price: fmpData.price,
-            change: fmpData.change,
-            percentChange: `${fmpData.changePercentage.toFixed(2)}%`,
-            marketCap: fmpData.marketCap.toLocaleString(),
-            volume: fmpData.volume,
-            dayLow: fmpData.dayLow,
-            dayHigh: fmpData.dayHigh,
-            yearLow: fmpData.yearLow,
-            yearHigh: fmpData.yearHigh,
-            exchange: fmpData.exchange,
-            timestamp: fmpData.timestamp,
-            previousClose: fmpData.previousClose,
-            targetMeanPrice: null // FMP requires separate call for this, leaving as null for now
-        };
+export async function fetchStock(symbol, existingStock = null) {
+    // Yahoo only
+    const yahooData = await getYahooData(symbol);
+    if (yahooData) {
+        console.log(`Fetched ${yahooData} from Yahoo successfully.`);
+        return yahooData;
     }
 
-    // Fallback to existing data if both fail
+    // Fallback to existing data if fetch fails
     return existingStock;
 }
 
@@ -106,7 +83,7 @@ export async function refreshAllStocks(currentStocks) {
         const batch = symbols.slice(i, i + batchSize);
         const promises = batch.map(async (symbol) => {
             const existingStock = currentStocks.find(s => s.symbol === symbol);
-            return fetchStockWithFallback(symbol, existingStock);
+            return fetchStock(symbol, existingStock);
         });
 
         const results = await Promise.all(promises);
@@ -115,3 +92,4 @@ export async function refreshAllStocks(currentStocks) {
 
     return updatedStocks;
 }
+
